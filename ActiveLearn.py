@@ -20,54 +20,48 @@ def QuickConvert(iterable):
 			continue
 	return frame
 
-# def ReturnMins(result_list,n):
-# '''Return the n lowest decided labels'''
-# 	decided_prob = [max(result_list[x,:]) for x in xrange(0,result_list.shape[0])]
-# 	mins = []
-# 	for i,x in enumerate(decided_prob):
-# 		if i < n:
-# 			mins.append(min(decided_prob))
-# 			decided_prob.remove(min(decided_prob))
-# 		else:
-# 			continue
-# 	#generate location of the minimums and return the list
-# 	decided_prob = [max(result_list[x,:]) for x in xrange(0,result_list.shape[0])]
-# 	min_index = [decided_prob.index(x) for x in mins]
+def ReturnMins(result_list,n):
+	'''Return the an index of the n lowest probability labels'''
+	decided_prob = [max(result_list[x,:]) for x in xrange(0,result_list.shape[0])]
+	mins = []
+	for i,x in enumerate(decided_prob):
+		if i < n:
+			mins.append(min(decided_prob))
+			decided_prob.remove(min(decided_prob))
+		else:
+			continue
+	#generate location of the minimums and return the list
+	decided_prob = [max(result_list[x,:]) for x in xrange(0,result_list.shape[0])]
+	min_index = [decided_prob.index(x) for x in mins]
+	return min_index
+
+# Generate data and initial seed index
 
 # filename=sys.argv[1]
 with open('./fixtures/airlines.json') as f:
 	json_raw = f.readlines()
 
 data = QuickConvert(json_raw)
-size = len(data.index)
+eval_set = np.random.choice(data.index,size=100,replace=False)
+eval_data = data.loc[eval_set]
+data.drop(eval_set,inplace=True)
 
-seed = np.random.choice(size,size=50,replace=False)
+seed = np.random.choice(data.index,size=50,replace=False)
+seed_index = [data.index.get_loc(x) for x in seed]
 
-tfidf_transformer = TfidfVectorizer()
+# Generate master tfidf for use then transform the evaluation set.
+
+tfidf_transformer = TfidfVectorizer(stop_words='english',ngram_range=(1,3),max_features=3000)
 global_tfidf = tfidf_transformer.fit_transform(data['content'])
+eval_tfidf = tfidf_transformer.transform(eval_data['content'])
 
-clf = MultinomialNB().fit(global_tfidf[seed], data.iloc[seed]['tag'])
+clf = MultinomialNB().fit(global_tfidf[seed_index], data.loc[seed]['tag'])
 results = clf.predict_proba(global_tfidf)
+mindex = ReturnMins(results,50)
 
-
-#Return the 50 lowest decided labels
-decided_prob = [max(results[x,:]) for x in xrange(0,results.shape[0])]
-mins = []
-for i,x in enumerate(decided_prob):
-	if i < 50:
-		mins.append(min(decided_prob))
-		decided_prob.remove(min(decided_prob))
-	else:
-		continue
-
-for x in mins:
-	print x
-#generate location of the minimums and return the list
-decided_prob = [max(results[x,:]) for x in xrange(0,results.shape[0])]
-min_index = [decided_prob.index(x) for x in mins]
-print "Score on mins:",clf.score(global_tfidf[min_index],data.iloc[min_index]['tag']),"Global Score:",clf.score(global_tfidf,data['tag'])
+print "Score on mins:",clf.score(global_tfidf[mindex],data.iloc[mindex]['tag']),"Maximum Training Score::",clf.score(global_tfidf,data['tag'])
+print "Evaluation Data score:",clf.score(eval_tfidf,eval_data['tag'])
 data['Predicted'] = clf.predict(global_tfidf)
-print data.loc[min_index]
 
 
 
