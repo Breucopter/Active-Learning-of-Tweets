@@ -112,7 +112,6 @@ def ActiveLearner(customer_frame,text_column,label_column,seed_size,interval_siz
 	run_count = 0
 	for train_set,test_set in shuff_set_indices:
 		# tenth_size = len(train_set)/10*-
-		print test_set.shape
 		eval_frame = customer_frame.iloc[test_set]
 		frame = customer_frame.iloc[train_set]
 		seed = frame.index[0:seed_size]
