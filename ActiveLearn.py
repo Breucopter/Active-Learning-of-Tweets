@@ -52,12 +52,13 @@ def cross_validate_list(X, y,transformer, model, size,n):
 	k_score_total = []
 	# train and score classifier for each slice
 	for train_slice, test_slice in k_fold_indices:
+		label_num = len(set(y_new.values))
 		k_train_tfidf = transformer.fit_transform(X_new.iloc[train_slice])
 		k_test_tfidf = transformer.transform(X_new.iloc[test_slice])
 		new_model = model.fit(k_train_tfidf.todense(),y_new.iloc[train_slice])
 		y_pred = new_model.predict(k_test_tfidf)
 		y_true = y_new.iloc[test_slice]
-		k_score = f1_score(y_true,y_pred,average='micro')
+		k_score = f1_score(y_true,y_pred,pos_label=None,average='micro')
 
 		k_score_total.append(k_score)
 	# return the average accuracy
@@ -104,14 +105,13 @@ def ReturnMins(results_list,data_index,n, master_list):
 # 	l = RandomIndex(data)
 # 	for iteration in xrange(1,100):
 
-def ActiveLearner(customer_frame,text_column,label_column,seed_size,interval_size,shuffle_iterations,eval_runs,eval_size,cv_folds,cv_shuffle_size):
+def ActiveLearner(customer_frame,text_column,label_column,seed_size,interval_size,shuffle_iterations,eval_runs,eval_size,cv_shuffles,cv_shuffle_size):
 	'''There are a lot of variables...'''
 
 
 	shuff_set_indices = StratifiedShuffleSplit(customer_frame[str(label_column)],n_iter=shuffle_iterations,test_size=eval_size,)
 	run_count = 0
 	for train_set,test_set in shuff_set_indices:
-		# tenth_size = len(train_set)/10*-
 		eval_frame = customer_frame.iloc[test_set]
 		frame = customer_frame.iloc[train_set]
 		seed = frame.index[0:seed_size]
@@ -128,9 +128,10 @@ def ActiveLearner(customer_frame,text_column,label_column,seed_size,interval_siz
 		act_predicted = active_clf.predict(eval_tfidf)
 		rand_predicted = random_clf.predict(eval_tfidf)
 		run_index = [seed_size]
-		Active_F1_List = [f1_score(eval_frame[str(label_column)],act_predicted,average='micro')]
-		Random_F1_List = [f1_score(eval_frame[str(label_column)],rand_predicted,average='micro')]
-		initial_cv = cross_validate_list(frame.iloc[master_list][str(text_column)], frame.iloc[master_list][str(label_column)],tfidf_transformer, MultinomialNB(),cv_shuffle_size,cv_folds).mean()
+		label_num = set(frame[str(label_column)].values)
+		Active_F1_List = [f1_score(eval_frame[str(label_column)].values,act_predicted,average='micro',pos_label=None)]
+		Random_F1_List = [f1_score(eval_frame[str(label_column)].values,rand_predicted,average='micro',pos_label=None)]
+		initial_cv = cross_validate_list(frame.iloc[master_list][str(text_column)], frame.iloc[master_list][str(label_column)],tfidf_transformer, MultinomialNB(),cv_shuffle_size,cv_shuffles).mean()
 		active_cv_list = [np.mean(initial_cv)]
 		random_cv_list = [np.mean(initial_cv)]
 
@@ -149,8 +150,8 @@ def ActiveLearner(customer_frame,text_column,label_column,seed_size,interval_siz
 			new_randoms = range(start,end)
 
 			#Calculate a CV score for the models on the currently labeled data
-			active_cv = cross_validate_list(frame.iloc[master_list][str(text_column)], frame.iloc[master_list][str(label_column)],tfidf_transformer, MultinomialNB(),cv_shuffle_size,cv_folds)
-			random_cv = cross_validate_list(frame.iloc[range(0,end)][str(text_column)], frame.iloc[range(0,end)][str(label_column)],tfidf_transformer, MultinomialNB(),cv_shuffle_size,cv_folds)
+			active_cv = cross_validate_list(frame.iloc[master_list][str(text_column)], frame.iloc[master_list][str(label_column)],tfidf_transformer, MultinomialNB(),cv_shuffle_size,cv_shuffles)
+			random_cv = cross_validate_list(frame.iloc[range(0,end)][str(text_column)], frame.iloc[range(0,end)][str(label_column)],tfidf_transformer, MultinomialNB(),cv_shuffle_size,cv_shuffles)
 			
 			active_cv_list.append(np.mean(active_cv))
 			random_cv_list.append(np.mean(random_cv))
@@ -172,9 +173,8 @@ def ActiveLearner(customer_frame,text_column,label_column,seed_size,interval_siz
 			eval_tfidf = tfidf_transformer.transform(eval_frame[str(text_column)])
 			act_predicted = active_clf.predict(eval_tfidf)
 			rand_predicted = random_clf.predict(eval_tfidf)
-			
-			Active_F1_List.append(f1_score(eval_frame[str(label_column)],act_predicted,average='micro'))
-			Random_F1_List.append(f1_score(eval_frame[str(label_column)],rand_predicted,average='micro'))
+			Active_F1_List.append(f1_score(eval_frame[str(label_column)].values,act_predicted,average='micro',pos_label=None))
+			Random_F1_List.append(f1_score(eval_frame[str(label_column)].values,rand_predicted,average='micro',pos_label=None))
 			run_index.append(end)
 			if i == eval_runs-1:
 				run_count += 1
@@ -189,20 +189,23 @@ def ActiveLearner(customer_frame,text_column,label_column,seed_size,interval_siz
 			random_frame[column_title] = Random_F1_List
 			active_cv_frame[column_title] = active_cv_list
 			random_cv_frame[column_title] = random_cv_list
+	
+# I could simplify to an output of 8 columns:
+# 	f1 mean, f1 variance, f1 cv, f1 cv variance, f1 diff mean, f1 diff variance, f1 cv diff, f1 cv diff variance
+
 	return active_frame,active_cv_frame,random_frame,random_cv_frame
-			# print "Active:",f1_score(eval_frame[str(label_column)],act_predicted,average='micro'),"Random:",f1_score(eval_frame[str(label_column)],rand_predicted,average='micro')
 		
 
 	# # What is the best case scenario? Trained on entire training set:
 	# best_clf = MultinomialNB().fit(global_tfidf,data['tag'])
 	# print "Score on model trained with all training data:",best_clf.score(eval_tfidf,eval_data['tag'])
 
-# with open('./fixtures/airlines.json') as f:
+# with open('./fixtures/fossil_labeled.json') as f:
 # 	json_raw = f.readlines()
 
 # data = QuickConvert(json_raw)
-
-# ActiveLearner(data,'content','tag',50,50,20,20,.1,6,10)
+# print data.head()
+# # ActiveLearner(data,'content','tag',50,50,20,20,.1,6,10)
 
 #check out expected maximization algorithm w/ SVMs
 #lins
