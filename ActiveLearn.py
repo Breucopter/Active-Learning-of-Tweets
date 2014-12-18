@@ -105,7 +105,7 @@ def ReturnMins(results_list,data_index,n, master_list):
 # 	l = RandomIndex(data)
 # 	for iteration in xrange(1,100):
 
-def ActiveLearner(customer_frame,text_column,label_column,seed_size,interval_size,shuffle_iterations,eval_runs,eval_size,cv_shuffles,cv_shuffle_size):
+def ActiveLearner(customer_frame,text_column,label_column,seed_size,interval_size,shuffle_iterations,eval_runs,eval_size,cv_shuffles,cv_shuffle_size,transformer,ml_model_base,tfidf_transformer):
 	'''There are a lot of variables...'''
 
 
@@ -118,10 +118,9 @@ def ActiveLearner(customer_frame,text_column,label_column,seed_size,interval_siz
 		seed_index = range(0,seed_size)
 		rand_index = range(0,seed_size)
 
-		tfidf_transformer = TfidfVectorizer(stop_words='english',ngram_range=(1,4),max_features=4000)
 		global_tfidf = tfidf_transformer.fit_transform(frame[str(text_column)])
-		active_clf = MultinomialNB().fit(global_tfidf[seed_index], frame.iloc[seed_index][str(label_column)])
-		random_clf = MultinomialNB().fit(global_tfidf[rand_index], frame.iloc[rand_index][str(label_column)])
+		active_clf = ml_model_base.fit(global_tfidf[seed_index], frame.iloc[seed_index][str(label_column)])
+		random_clf = ml_model_base.fit(global_tfidf[rand_index], frame.iloc[rand_index][str(label_column)])
 		master_list = range(0,seed_size)
 
 		eval_tfidf = tfidf_transformer.transform(eval_frame[str(text_column)])
@@ -131,7 +130,7 @@ def ActiveLearner(customer_frame,text_column,label_column,seed_size,interval_siz
 		label_num = set(frame[str(label_column)].values)
 		Active_F1_List = [f1_score(eval_frame[str(label_column)].values,act_predicted,average='micro',pos_label=None)]
 		Random_F1_List = [f1_score(eval_frame[str(label_column)].values,rand_predicted,average='micro',pos_label=None)]
-		initial_cv = cross_validate_list(frame.iloc[master_list][str(text_column)], frame.iloc[master_list][str(label_column)],tfidf_transformer, MultinomialNB(),cv_shuffle_size,cv_shuffles).mean()
+		initial_cv = cross_validate_list(frame.iloc[master_list][str(text_column)], frame.iloc[master_list][str(label_column)],tfidf_transformer, ml_model_base,cv_shuffle_size,cv_shuffles).mean()
 		active_cv_list = [np.mean(initial_cv)]
 		random_cv_list = [np.mean(initial_cv)]
 
@@ -150,8 +149,8 @@ def ActiveLearner(customer_frame,text_column,label_column,seed_size,interval_siz
 			new_randoms = range(start,end)
 
 			#Calculate a CV score for the models on the currently labeled data
-			active_cv = cross_validate_list(frame.iloc[master_list][str(text_column)], frame.iloc[master_list][str(label_column)],tfidf_transformer, MultinomialNB(),cv_shuffle_size,cv_shuffles)
-			random_cv = cross_validate_list(frame.iloc[range(0,end)][str(text_column)], frame.iloc[range(0,end)][str(label_column)],tfidf_transformer, MultinomialNB(),cv_shuffle_size,cv_shuffles)
+			active_cv = cross_validate_list(frame.iloc[master_list][str(text_column)], frame.iloc[master_list][str(label_column)],tfidf_transformer, ml_model_base,cv_shuffle_size,cv_shuffles)
+			random_cv = cross_validate_list(frame.iloc[range(0,end)][str(text_column)], frame.iloc[range(0,end)][str(label_column)],tfidf_transformer, ml_model_base,cv_shuffle_size,cv_shuffles)
 			
 			active_cv_list.append(np.mean(active_cv))
 			random_cv_list.append(np.mean(random_cv))
@@ -195,9 +194,10 @@ def ActiveLearner(customer_frame,text_column,label_column,seed_size,interval_siz
 
 	return active_frame,active_cv_frame,random_frame,random_cv_frame
 		
+tfidf_transformer = TfidfVectorizer(stop_words='english',ngram_range=(1,4),max_features=4000)
 
 	# # What is the best case scenario? Trained on entire training set:
-	# best_clf = MultinomialNB().fit(global_tfidf,data['tag'])
+	# best_clf = ml_model_base.fit(global_tfidf,data['tag'])
 	# print "Score on model trained with all training data:",best_clf.score(eval_tfidf,eval_data['tag'])
 
 # with open('./fixtures/fossil_labeled.json') as f:
